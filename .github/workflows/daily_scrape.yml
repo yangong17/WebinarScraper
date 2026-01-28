@@ -2,9 +2,9 @@ name: Daily Webinar Scrape
 
 on:
   schedule:
-    # Run daily at 6:00 AM UTC
+    # Runs at 6 AM UTC every day
     - cron: '0 6 * * *'
-  workflow_dispatch: # Allow manual trigger
+  workflow_dispatch:  # Allow manual trigger
 
 jobs:
   scrape:
@@ -18,18 +18,28 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-          cache: 'pip'
       
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+      
+      - name: Install Playwright browsers
+        run: |
+          playwright install chromium
+          playwright install-deps chromium
       
       - name: Run scraper
-        run: python src/main.py
-      
-      - name: Commit database changes
+        env:
+          CODA_API_TOKEN: ${{ secrets.CODA_API_TOKEN }}
+          CODA_DOC_ID: ${{ secrets.CODA_DOC_ID }}
+          CODA_TABLE_ID: ${{ secrets.CODA_TABLE_ID }}
         run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          git add data/webinars.db
-          git diff --staged --quiet || git commit -m "Update webinars database [skip ci]"
-          git push
+          python src/main.py
+      
+      - name: Upload database artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: webinars-db
+          path: data/webinars.db
+          retention-days: 30

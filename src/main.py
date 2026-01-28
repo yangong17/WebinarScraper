@@ -1,7 +1,8 @@
 """
 Main entry point for the Webinar Aggregation Agent.
-Simplified version: On-demand webinars only.
+Supports export to Coda when CODA_API_TOKEN is set.
 """
+import os
 import sys
 from pathlib import Path
 
@@ -21,6 +22,7 @@ def main():
     print("=" * 60)
     
     db = DatabaseManager()
+    all_webinars = []
     
     total_inserted = 0
     total_updated = 0
@@ -40,6 +42,7 @@ def main():
                 total_inserted += 1
             else:
                 total_updated += 1
+            all_webinars.append(r)
         print(f"  ✓ Collected {len(syndio_results)} webinars")
     else:
         print(f"  ✗ No new webinars found")
@@ -59,6 +62,7 @@ def main():
                 total_inserted += 1
             else:
                 total_updated += 1
+            all_webinars.append(r)
         print(f"  ✓ Collected {len(waw_results)} webinars")
     else:
         print(f"  ✗ No new webinars found")
@@ -76,6 +80,7 @@ def main():
                 total_inserted += 1
             else:
                 total_updated += 1
+            all_webinars.append(r)
         print(f"  ✓ Collected {len(pave_results)} webinars")
     else:
         print(f"  ✗ No webinars found")
@@ -83,6 +88,17 @@ def main():
     print(f"\n{'=' * 60}")
     print(f"Complete! Inserted: {total_inserted}, Updated: {total_updated}")
     print("=" * 60)
+    
+    # Export to Coda if credentials are set
+    if os.environ.get("CODA_API_TOKEN"):
+        print("\n" + "─" * 40)
+        print("Exporting to Coda...")
+        try:
+            from src.export.coda import export_to_coda
+            result = export_to_coda(all_webinars)
+            print(f"  ✓ {result['message']}")
+        except Exception as e:
+            print(f"  ✗ Coda export failed: {e}")
     
     # Show database contents
     print("\nDatabase Contents:")
