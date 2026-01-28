@@ -4,7 +4,7 @@ Coda API integration for exporting webinar data.
 Requires:
 - CODA_API_TOKEN: Your Coda API token
 - CODA_DOC_ID: The document ID from your Coda doc URL
-- CODA_TABLE_ID: The table ID (can be table name or ID)
+- CODA_TABLE_ID: The table ID or table name
 """
 import os
 import requests
@@ -32,6 +32,21 @@ class CodaExporter:
             "Content-Type": "application/json"
         }
     
+    def list_tables(self) -> List[Dict]:
+        """List all tables in the doc to help find the correct table ID."""
+        url = f"{self.BASE_URL}/docs/{self.doc_id}/tables"
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            tables = response.json().get("items", [])
+            print(f"  Available tables in doc:")
+            for t in tables:
+                print(f"    - ID: {t.get('id')} | Name: {t.get('name')}")
+            return tables
+        except Exception as e:
+            print(f"  Error listing tables: {e}")
+            return []
+    
     def get_existing_links(self) -> set:
         """Get existing webinar links from Coda table to avoid duplicates."""
         url = f"{self.BASE_URL}/docs/{self.doc_id}/tables/{self.table_id}/rows"
@@ -48,6 +63,11 @@ class CodaExporter:
                 link = values.get("Link") or values.get("link") or values.get("URL") or values.get("url")
                 if link:
                     existing_links.add(link)
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"  Table not found. Listing available tables...")
+                self.list_tables()
+            raise
         except Exception as e:
             print(f"Warning: Could not fetch existing rows: {e}")
         
@@ -65,6 +85,10 @@ class CodaExporter:
         """
         url = f"{self.BASE_URL}/docs/{self.doc_id}/tables/{self.table_id}/rows"
         
+        # First, verify we can access the table
+        print(f"  Using Doc ID: {self.doc_id}")
+        print(f"  Using Table ID: {self.table_id}")
+        
         # Get existing links to determine what's new
         existing_links = self.get_existing_links()
         
@@ -81,7 +105,7 @@ class CodaExporter:
                 "cells": [
                     {"column": "Source", "value": w.get("source", "")},
                     {"column": "Title", "value": w.get("title", "")},
-                    {"column": "Air Date", "value": w.get("air_date", "")},
+                    {"column": "Air Date", "value": w.get("air_date") or ""},
                     {"column": "Link", "value": w.get("link", "")}
                 ]
             })
@@ -99,30 +123,9 @@ class CodaExporter:
             
             result = response.json()
             total_inserted += len(batch)
-            print(f"Inserted batch of {len(batch)} rows")
+            print(f"  Inserted batch of {len(batch)} rows")
         
         return {"inserted": total_inserted, "message": f"Added {total_inserted} new webinars"}
-    
-    def clear_table(self) -> Dict:
-        """Clear all rows from the table (use with caution!)."""
-        url = f"{self.BASE_URL}/docs/{self.doc_id}/tables/{self.table_id}/rows"
-        
-        # Get all row IDs
-        response = requests.get(url, headers=self.headers)
-        response.raise_for_status()
-        
-        rows = response.json().get("items", [])
-        row_ids = [row["id"] for row in rows]
-        
-        if not row_ids:
-            return {"deleted": 0}
-        
-        # Delete rows
-        for row_id in row_ids:
-            delete_url = f"{url}/{row_id}"
-            requests.delete(delete_url, headers=self.headers)
-        
-        return {"deleted": len(row_ids)}
 
 
 def export_to_coda(webinars: List[Dict]) -> Dict:
